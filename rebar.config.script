@@ -1,7 +1,23 @@
 
 NifSharedSources = ["c_src/esqlite3_nif.c"].
 NifStaticSources = NifSharedSources ++ ["c_src/sqlite3/sqlite3.c"].
-CFlagsDefault = "$CFLAGS -Os -DSQLITE_DQS=0 -DSQLITE_THREADSAFE=1 -DSQLITE_DEFAULT_MEMSTATUS=0 -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 -DSQLITE_LIKE_DOESNT_MATCH_BLOBS -DSQLITE_MAX_EXPR_DEPTH=0 -DSQLITE_OMIT_DEPRECATED -DSQLITE_OMIT_PROGRESS_CALLBACK -DSQLITE_USE_ALLOCA -DSQLITE_OMIT_AUTOINIT -DSQLITE_USE_URI -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS5 -DSQLITE_ENABLE_MATH_FUNCTIONS -DSQLITE_ENABLE_JSON1 -DSQLITE_ENABLE_RTREE -DSQLITE_ENABLE_GEOPOLY".
+
+% Set platform-specific file extension
+NifExtension =
+  case os:type() of
+    {win32, _} -> 
+        % We only support compiling with Clang on windows
+        case os:find_executable("clang-cl") of
+            false ->
+                error("Clang is required but not found in PATH");
+            _ -> ok 
+        end,
+        ".dll";
+    {unix, darwin} -> ".dylib";
+    _ -> ".so"
+  end.
+
+CFlagsDefault = "$CFLAGS -v -O3 -DSQLITE_DQS=0 -DSQLITE_THREADSAFE=1 -DSQLITE_DEFAULT_MEMSTATUS=0 -DSQLITE_DEFAULT_WAL_SYNCHRONOUS=1 -DSQLITE_LIKE_DOESNT_MATCH_BLOBS -DSQLITE_MAX_EXPR_DEPTH=0 -DSQLITE_OMIT_DEPRECATED -DSQLITE_OMIT_PROGRESS_CALLBACK -DSQLITE_USE_ALLOCA -DSQLITE_OMIT_AUTOINIT -DSQLITE_USE_URI -DSQLITE_ENABLE_FTS3 -DSQLITE_ENABLE_FTS3_PARENTHESIS -DSQLITE_ENABLE_FTS4 -DSQLITE_ENABLE_FTS5 -DSQLITE_ENABLE_MATH_FUNCTIONS -DSQLITE_ENABLE_JSON1 -DSQLITE_ENABLE_RTREE -DSQLITE_ENABLE_GEOPOLY".
 DrvLdFlagsDefault = "-shared -lsqlite3".
 
 DrvLdFlags =
@@ -22,8 +38,10 @@ CFlags =
         CFlagsOverride -> CFlagsOverride
     end.
 
+WindowsLdFlags = "-shared -Wl,--export-all-symbols".
+
 [
-    {minimum_otp_vsn, "22.0"},
+    {minimum_otp_vsn, "27.0"},
 
     {erl_opts, [debug_info]},
 
@@ -34,6 +52,12 @@ CFlags =
                    deprecated_functions]},
 
     {port_env, [
+        % Windows configuration (using clang)
+        {"win32", "CC", "clang-cl"},
+        {"win32", "LINKER", "clang-cl"},
+        {"win32", "CFLAGS", "$CFLAGS -Xclang -O3"},
+        {"win32", "DRV_LDFLAGS", WindowsLdFlags},
+
         %% Default darwin ldflags causes loading of system sqlite. Removed -bundle flag.
         {"darwin", "DRV_LDFLAGS",
             "-flat_namespace -undefined suppress $ERL_LDFLAGS"},
@@ -47,7 +71,7 @@ CFlags =
         {"CFLAGS", CFlags}
     ] ++ LdEnv},
     {port_specs, [
-        {"priv/esqlite3_nif.so", NifSources}
+        {["priv/esqlite3_nif", NifExtension], NifSources}
     ]},
 
     {plugins, [{pc, "~> 1.15"}]},
